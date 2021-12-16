@@ -60,6 +60,7 @@ check = SQLCheckOperator(
 
 check_with_ge = GreatExpectationsOperator(
     task_id='check_ge_suite',
+    retries=2,
     expectation_suite_name='public.demo.warning',
     data_context_root_dir='{ge_root_dir}'.format(ge_root_dir=GE_DIRECTORY),
     batch_kwargs={
