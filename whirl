@@ -102,8 +102,17 @@ test_dag_state() {
   if [ "${SHOW_RESULT}" == true ]; then
     output=$(curl -s -u admin:admin "http://localhost:${AIRFLOW_UI_PORT}/api/v1/dags/${DAG_ID}/dagRuns" | jq ".dag_runs" )
     echo "Dagruns: $output" >&2
+    FIRST_FAILED_DAG_RUN_ID=$(curl -s -u admin:admin "http://localhost:${AIRFLOW_UI_PORT}/api/v1/dags/${DAG_ID}/dagRuns" | jq -r "[.dag_runs[] | select(.state = \"${STATE}\")] | .[0].dag_run_id")
     output=$(curl -s -u admin:admin "http://localhost:${AIRFLOW_UI_PORT}/api/v1/dags/${DAG_ID}/dagRuns/~/taskInstances" | jq ".task_instances" )
-    echo "Tasks: $output" >&2
+    echo "All Tasks: $output" >&2
+    FAILED_TASKS=($(curl -s -u admin:admin "http://localhost:${AIRFLOW_UI_PORT}/api/v1/dags/${DAG_ID}/dagRuns/${FIRST_FAILED_DAG_RUN_ID}/taskInstances" | jq -r ".task_instances[] | select(.state == \"${STATE}\") | [.task_id, .try_number] | join(\":\") "))
+    for TASK in ${FAILED_TASKS[@]}; do
+      echo "Getting logs for failed task ${TASK%:*}" >&2
+      TASK_LOG=$(curl -s -u admin:admin "http://localhost:${AIRFLOW_UI_PORT}/api/v1/dags/${DAG_ID}/dagRuns/${FIRST_FAILED_DAG_RUN_ID}/taskInstances/${TASK%:*}/logs/${TASK#*:}")
+      echo "=========== Start task log ==============================" >&2
+      echo "Task log: $TASK_LOG" >&2
+      echo "============ End task log ===============================" >&2
+    done
   else
     echo "$result"
   fi
@@ -178,10 +187,8 @@ start() {
           echo "Dag '${DAG_ID}' run(s) failed"
           # output dagrun result
           $(test_dag_state "${DAG_ID}" "${FAILURE_STATE}" true)
-          if [ "$STOP_ON_FAILURE" = true ]; then
-            stop
-            exit 1
-          fi
+          stop
+          exit 1
         fi
       fi
     fi
